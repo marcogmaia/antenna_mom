@@ -36,12 +36,15 @@ class Dipole {
         Z_(Eigen::MatrixXcd(segments, segments)),
         V_(Eigen::VectorXcd::Zero(segments)) {
     const double omega = 2 * pi * frequency_;
-    i_in = std::complex(0.0, -omega * kEpsilon0);
-    z_in = 1.0 / i_in;
-    V_(elements_ / 2) = i_in;
-    FillMatrix();
+    // i_in = std::complex(0.0, -omega * kEpsilon0);
+    i_in = std::complex(0.0, -2 * pi * frequency_ * kEpsilon0));
+    V_.array() = i_in;
+    FillImpedances();
     Solve();
+    // z_in = 1.0 / i_in;
   }
+
+  Eigen::VectorXcd GetCurrents() { return I_; }
 
  private:
   void Solve() {
@@ -75,7 +78,7 @@ class Dipole {
     return Square(k_) * a_mn - phi_mn;
   }
 
-  void FillMatrix() {
+  void FillImpedances() {
     for (int i = 0; i < elements_; ++i) {
       for (int j = 0; j < elements_; ++j) {
         Z_(i, j) = Impedance(i, j);
@@ -100,6 +103,7 @@ class Dipole {
 };
 
 int main() {
+  // Inutil para esse problema, só importa a razão do comprimento de onda.
   double frequency = 2.4 * 1e6;
   double wavelenght = kSpeedOfLight / frequency;
   double len = wavelenght / 2;
@@ -108,7 +112,7 @@ int main() {
   int elements = 3;
 
   Dipole dipole(len, frequency, radius, elements);
-  std::cout << res << '\n';
+  std::cout << dipole.GetCurrents() << '\n';
 
   return 0;
 }
