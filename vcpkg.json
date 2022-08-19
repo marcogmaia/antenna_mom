@@ -1,0 +1,9 @@
+{
+  "name": "maia-deps",
+  "version-string": "0.0.1",
+  "builtin-baseline": "3d8f78171a2a37d461077bf8d063256b63e25a4f",
+  "dependencies": [
+    "spdlog",
+    "eigen3"
+  ]
+}

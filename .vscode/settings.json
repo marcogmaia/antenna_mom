@@ -1,0 +1,10 @@
+{
+  "cmake.configureArgs": [
+    // "-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/windows-clang.cmake"
+    "-DCMAKE_TOOLCHAIN_FILE=C:/Users/marco/Documents/dev/cpp/vcpkg/scripts/buildsystems/vcpkg.cmake"
+  ],
+  "files.associations": {
+    "*.m": "matlab",
+    "core": "cpp"
+  }
+}
