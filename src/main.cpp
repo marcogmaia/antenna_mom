@@ -139,11 +139,6 @@ void PlotDipoleReactanceResistance(const Dipole& dipole) {
       std::format("N={}", dipole.get_elements()).c_str(), xs.data(), ys.data(), xs.size());
 }
 
-void PlotImpedances(const std::vector<double>& resistances, const std::vector<double>& reactances) {
-  ImPlot::PlotLine("Resistance", resistances.data(), resistances.size());
-  ImPlot::PlotLine("Reactance", reactances.data(), reactances.size());
-}
-
 void AdjustableDipole() {
   if (ImGui::Begin("Adjustable")) {
     static int segs = 3;
@@ -172,9 +167,31 @@ using Dipoles = std::vector<Dipole>;
 
 }
 
-void ShowInterface(const Dipoles& dipoles,
-                   const std::vector<double>& resistances,
-                   const std::vector<double>& reactances) {
+struct ImpedancePlotter {
+  ImpedancePlotter(double len, double frequency, double radius) {
+    reactances.reserve(128);
+    resistances.reserve(128);
+    elems.reserve(128);
+    for (int segs = 3; segs < 205; segs += 2) {
+      Dipole dipole{len, frequency, radius, segs};
+      const auto input_impedance = dipole.get_input_impedance();
+      elems.emplace_back(segs);
+      resistances.emplace_back(input_impedance.real());
+      reactances.emplace_back(input_impedance.imag());
+    }
+  };
+
+  void Plot() const {
+    ImPlot::PlotLine("Resistance", elems.data(), resistances.data(), resistances.size());
+    ImPlot::PlotLine("Reactance", elems.data(), reactances.data(), reactances.size());
+  }
+
+  std::vector<double> reactances;
+  std::vector<double> resistances;
+  std::vector<double> elems;
+};
+
+void ShowInterface(const Dipoles& dipoles, const ImpedancePlotter& impedance_plotter) {
   auto* window = GuiInit();
 
   // Main loop
@@ -194,7 +211,7 @@ void ShowInterface(const Dipoles& dipoles,
 
     if (ImGui::Begin("Convergência com N -- Impedâncias")) {
       if (ImPlot::BeginPlot("##Impedances")) {
-        PlotImpedances(resistances, reactances);
+        impedance_plotter.Plot();
       }
       ImPlot::EndPlot();
     }
@@ -223,18 +240,9 @@ int main() {
     dipoles.emplace_back(len, frequency, radius, elems);
   }
 
-  std::vector<double> reactances;
-  std::vector<double> resistances;
-  reactances.reserve(128);
-  resistances.reserve(128);
-  for (int segs = 3; segs < 205; segs += 2) {
-    Dipole dipole{len, frequency, radius, segs};
-    const auto input_impedance = dipole.get_input_impedance();
-    resistances.emplace_back(input_impedance.real());
-    reactances.emplace_back(input_impedance.imag());
-  }
+  ImpedancePlotter impedance_plotter{len, frequency, radius};
 
-  ShowInterface(dipoles, resistances, reactances);
+  ShowInterface(dipoles, impedance_plotter);
 
   return 0;
 }
