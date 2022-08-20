@@ -50,7 +50,9 @@ class Dipole {
     V_(central_element) = v_in;
     FillImpedances();
     I_ = Solve();
+    Z_ = V_.array() / I_.array();
     z_in = 1.0 / I_(central_element);
+    const auto zin_test = V_(central_element) / I_(central_element);
     std::iota(xs_.begin(), xs_.end(), 0);
     std::ranges::transform(
         xs_, xs_.begin(), [this](double n) { return n * delta_ - length_ / 2.0; });
@@ -58,20 +60,22 @@ class Dipole {
         I_, std::next(ys_.begin()), [](std::complex<double> value) { return std::abs(value); });
   }
 
-  Eigen::VectorXcd GetCurrents() { return I_; }
-
+  // Accessors
+  const Eigen::VectorXcd& GetCurrents() const { return I_; }
   const std::vector<double>& get_xs() const { return xs_; }
-
   const std::vector<double>& get_ys() const { return ys_; }
+  const std::vector<double>& get_resistance() const { return resistance_; }
+  const std::vector<double>& get_reactance() const { return reactance_; }
+
+  int get_elements() const { return elements_; }
 
  private:
-  Eigen::VectorXcd Solve() {
-    Eigen::JacobiSVD<Eigen::MatrixXcd> solver(
-        Z_, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
+  Eigen::VectorXcd Solve() const {
+    Eigen::FullPivHouseholderQR<Eigen::MatrixXcd> solver(Z_);
     return solver.solve(V_);
   }
 
-  std::complex<double> Psi(double m, double n) {
+  std::complex<double> Psi(double m, double n) const {
     const double zm = m * delta_ - half_lenght_;
     const double zn = n * delta_ - half_lenght_;
     const double r = std::sqrt(Square(zm - zn) - Square(radius_));
@@ -89,7 +93,7 @@ class Dipole {
     return (m == n) ? m_eq_n : m_neq_n;
   }
 
-  std::complex<double> Impedance(int m, int n) {
+  std::complex<double> Impedance(int m, int n) const {
     const auto a_mn = Square(delta_) * Psi(m, n);
     const auto phi_mn =
         Psi(m - .5, n - .5) - Psi(m - .5, n + .5) - Psi(m + .5, n - .5) + Psi(m + .5, n + .5);
@@ -121,16 +125,78 @@ class Dipole {
 
   std::vector<double> xs_;
   std::vector<double> ys_;
+  std::vector<double> resistance_;
+  std::vector<double> reactance_;
 };
 
-void PlotDipole(std::string_view legend, Dipole& dipole) {
+void PlotDipoleCurrent(const Dipole& dipole) {
   const auto& xs = dipole.get_xs();
   const auto& ys = dipole.get_ys();
-  ImPlot::PlotLine(legend.data(), xs.data(), ys.data(), xs.size());
+  ImPlot::PlotLine(
+      std::format("N={}", dipole.get_elements()).c_str(), xs.data(), ys.data(), xs.size());
+}
+
+void PlotDipoleReactanceResistance(const Dipole& dipole) {}
+
+void PlotResistances(const Dipole& dipole) {}
+
+void AdjustableDipole() {
+  if (ImGui::Begin("Adjustable")) {
+    static int segs = 3;
+    constexpr double frequency = 2.4 * 1e9;
+    constexpr double wavelenght = kSpeedOfLight / frequency;
+    constexpr double len = wavelenght / 2;
+    constexpr double radius = wavelenght * 1e-4;
+    static auto dipole = std::make_unique<Dipole>(len, frequency, radius, segs);
+
+    if (ImGui::SliderInt("segsments", &segs, 3, 101)) {
+      segs = segs & 1 ? segs : segs + 1;
+      dipole = std::make_unique<Dipole>(len, frequency, radius, segs);
+    }
+
+    if (ImPlot::BeginPlot("##AdjustableDipole")) {
+      PlotDipoleCurrent(*dipole);
+      ImPlot::EndPlot();
+    }
+  }
+  ImGui::End();
+}
+
+namespace {
+
+using Dipoles = std::vector<Dipole>;
+
+}
+
+void ShowInterface(const Dipoles& dipoles) {
+  auto* window = GuiInit();
+
+  // Main loop
+  while (!glfwWindowShouldClose(window)) {
+    GuiNewFrame();
+    glfwPollEvents();
+
+    if (ImGui::Begin("Dipole")) {
+      if (ImPlot::BeginPlot("##Dipole")) {
+        for (auto& dipole : dipoles) {
+          PlotDipoleCurrent(dipole);
+        }
+        ImPlot::EndPlot();
+      }
+    }
+    ImGui::End();
+
+    AdjustableDipole();
+
+    ClearBackGround(window);
+    Render(window);
+  }
+
+  GuiTerminate(window);
 }
 
 int main() {
-  // Inutil para esse problema, só importa a razão do comprimento de onda.
+  // Inútil para esse problema, só importa a razão do comprimento de onda.
   // double frequency = 2.4 * 1e6;
   const double frequency = 2.4 * 1e9;
   double wavelenght = kSpeedOfLight / frequency;
@@ -139,31 +205,12 @@ int main() {
 
   int elements = 3;
 
-  Dipole dipole1(len, frequency, radius, 3);
-  Dipole dipole2(len, frequency, radius, 7);
-  Dipole dipole3(len, frequency, radius, 19);
-  Dipole dipole4(len, frequency, radius, 55);
-
-  auto* window = GuiInit();
-  
-  // Main loop
-  while (!glfwWindowShouldClose(window)) {
-    GuiNewFrame();
-    glfwPollEvents();
-
-    if (ImPlot::BeginPlot("Dipole")) {
-      PlotDipole("N=3", dipole1);
-      PlotDipole("N=7", dipole2);
-      PlotDipole("N=19", dipole3);
-      PlotDipole("N=55", dipole4);
-    }
-    ImPlot::EndPlot();
-
-    ClearBackGround(window);
-    Render(window);
+  std::vector<Dipole> dipoles;
+  for (auto& elems : {3, 7, 19, 29}) {
+    dipoles.emplace_back(len, frequency, radius, elems);
   }
 
-  GuiTerminate(window);
+  ShowInterface(dipoles);
 
   return 0;
 }
