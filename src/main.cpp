@@ -37,21 +37,22 @@ class Dipole {
         elements_(segments),
         Z_(Eigen::MatrixXcd(segments, segments)),
         V_(Eigen::VectorXcd::Zero(segments)) {
+    const int central_element = elements_ / 2;
     const double omega = 2 * pi * frequency_;
     v_in = std::complex(0.0, -omega * kEpsilon0);
-    z_in = 1.0 / v_in;
-    V_.array() = v_in;
+    V_(central_element) = v_in;
     FillImpedances();
-    Solve();
+    I_ = Solve();
+    z_in = 1.0 / I_(central_element);
   }
 
   Eigen::VectorXcd GetCurrents() { return I_; }
 
  private:
-  void Solve() {
+  Eigen::VectorXcd Solve() {
     Eigen::JacobiSVD<Eigen::MatrixXcd> solver(
         Z_, Eigen::DecompositionOptions::ComputeThinU | Eigen::DecompositionOptions::ComputeThinV);
-    I_ = solver.solve(V_);
+    return solver.solve(V_);
   }
 
   std::complex<double> Psi(double m, double n) {
@@ -105,15 +106,19 @@ class Dipole {
 
 int main() {
   // Inutil para esse problema, só importa a razão do comprimento de onda.
-  double frequency = 2.4 * 1e6;
+  // double frequency = 2.4 * 1e6;
+  const double frequency = 2.4 * 1e6;
   double wavelenght = kSpeedOfLight / frequency;
   double len = wavelenght / 2;
   double radius = wavelenght * 1e-4;
 
   int elements = 3;
 
-  Dipole dipole(len, frequency, radius, elements);
-  std::cout << dipole.GetCurrents() << '\n';
+  for (const auto &elements : {3, 7, 19}) {
+    Dipole dipole(len, frequency, radius, elements);
+    std::cout << dipole.GetCurrents() << '\n';
+    std::cout << std::endl;
+  }
 
   ShowImgui();
 
