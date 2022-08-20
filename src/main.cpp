@@ -128,6 +128,7 @@ class Dipole {
 void PlotDipoleCurrent(const Dipole& dipole) {
   const auto& xs = dipole.get_xs();
   const auto& ys = dipole.get_currents();
+
   ImPlot::PlotLine(
       std::format("N={}", dipole.get_elements()).c_str(), xs.data(), ys.data(), xs.size());
 }
@@ -217,6 +218,7 @@ void ShowInterface(const Dipoles& dipoles, const ImpedancePlotter& impedance_plo
     }
     ImGui::End();
 
+    ImPlot::SetNextLineStyle(ImVec4{1.0, 1.0, 1.0, 1.0});
     AdjustableDipole();
 
     ClearBackGround(window);
@@ -229,7 +231,7 @@ void ShowInterface(const Dipoles& dipoles, const ImpedancePlotter& impedance_plo
 int main() {
   // Inútil para esse problema, só importa a razão do comprimento de onda.
   // double frequency = 2.4 * 1e9;
-  const double frequency = 300 * 1e6;
+  const double frequency = 2.4 * 1e9;
   double wavelenght = kSpeedOfLight / frequency;
   double len = wavelenght / 2;
   double radius = wavelenght * 1e-4;

@@ -1,6 +1,10 @@
-.vs/
 # .vscode/
+.vs/
 .cache/
-
+executable/
 build/
 out/
+
+*.7z
+*.zip
+*.mp4
