@@ -43,29 +43,31 @@ class Dipole {
         Z_(Eigen::MatrixXcd(segments, segments)),
         V_(Eigen::VectorXcd::Zero(segments)),
         xs_(segments + 2, 0),
-        ys_(segments + 2, 0) {
+        currents_(segments + 2, 0) {
     const int central_element = elements_ / 2;
     const double omega = 2 * pi * frequency_;
     v_in = std::complex(0.0, -omega * kEpsilon0);
     V_(central_element) = v_in;
     FillImpedances();
     I_ = Solve();
+    i_in_ = I_(central_element);
     Z_ = V_.array() / I_.array();
-    z_in = 1.0 / I_(central_element);
-    const auto zin_test = V_(central_element) / I_(central_element);
+    z_in_ = 1.0 / i_in_;
     std::iota(xs_.begin(), xs_.end(), 0);
     std::ranges::transform(
         xs_, xs_.begin(), [this](double n) { return n * delta_ - length_ / 2.0; });
-    std::ranges::transform(
-        I_, std::next(ys_.begin()), [](std::complex<double> value) { return std::abs(value); });
+    std::ranges::transform(I_, std::next(currents_.begin()), [](std::complex<double> value) {
+      return std::abs(value);
+    });
   }
 
   // Accessors
   const Eigen::VectorXcd& GetCurrents() const { return I_; }
   const std::vector<double>& get_xs() const { return xs_; }
-  const std::vector<double>& get_ys() const { return ys_; }
-  const std::vector<double>& get_resistance() const { return resistance_; }
-  const std::vector<double>& get_reactance() const { return reactance_; }
+  const std::vector<double>& get_currents() const { return currents_; }
+
+  std::complex<double> get_input_impedance() const { return z_in_; }
+  std::complex<double> get_input_current() const { return i_in_; }
 
   int get_elements() const { return elements_; }
 
@@ -80,23 +82,18 @@ class Dipole {
     const double zn = n * delta_ - half_lenght_;
     const double r = std::sqrt(Square(zm - zn) - Square(radius_));
 
-    const auto m_eq_n = [=] {
-      return 1 / (2 * pi * delta_) * std::log(delta_ / radius_) - std::complex(0.0, k_ / (4 * pi));
-    }();
-
-    const auto m_neq_n = [=] {
-      const auto pow = std::complex(0.0, k_ * r);
-      const auto num = std::exp(pow);
-      return num / (4 * pi * r);
-    }();
-
-    return (m == n) ? m_eq_n : m_neq_n;
+    if (m == n) {
+      return std::log(delta_ / radius_) / (2 * pi * delta_) - std::complex(0.0, k_ / (4 * pi));
+    }
+    const auto pow = std::complex(0.0, -k_ * r);
+    const auto num = std::exp(pow);
+    return num / (4 * pi * r);
   }
 
   std::complex<double> Impedance(int m, int n) const {
     const auto a_mn = Square(delta_) * Psi(m, n);
-    const auto phi_mn =
-        Psi(m - .5, n - .5) - Psi(m - .5, n + .5) - Psi(m + .5, n - .5) + Psi(m + .5, n + .5);
+    const auto phi_mn = Psi(m - 0.5, n - 0.5) - Psi(m - 0.5, n + 0.5) - Psi(m + 0.5, n - 0.5) +
+                        Psi(m + 0.5, n + 0.5);
     return Square(k_) * a_mn - phi_mn;
   }
 
@@ -117,33 +114,40 @@ class Dipole {
   const double half_lenght_;
   const int elements_;
 
-  std::complex<double> z_in;
+  std::complex<double> z_in_;
   std::complex<double> v_in;
+  std::complex<double> i_in_;
   Eigen::MatrixXcd Z_;
   Eigen::VectorXcd V_;
   Eigen::VectorXcd I_;
 
   std::vector<double> xs_;
-  std::vector<double> ys_;
-  std::vector<double> resistance_;
-  std::vector<double> reactance_;
+  std::vector<double> currents_;
 };
 
 void PlotDipoleCurrent(const Dipole& dipole) {
   const auto& xs = dipole.get_xs();
-  const auto& ys = dipole.get_ys();
+  const auto& ys = dipole.get_currents();
   ImPlot::PlotLine(
       std::format("N={}", dipole.get_elements()).c_str(), xs.data(), ys.data(), xs.size());
 }
 
-void PlotDipoleReactanceResistance(const Dipole& dipole) {}
+void PlotDipoleReactanceResistance(const Dipole& dipole) {
+  const auto& xs = dipole.get_xs();
+  const auto& ys = dipole.get_currents();
+  ImPlot::PlotLine(
+      std::format("N={}", dipole.get_elements()).c_str(), xs.data(), ys.data(), xs.size());
+}
 
-void PlotResistances(const Dipole& dipole) {}
+void PlotImpedances(const std::vector<double>& resistances, const std::vector<double>& reactances) {
+  ImPlot::PlotLine("Resistance", resistances.data(), resistances.size());
+  ImPlot::PlotLine("Reactance", reactances.data(), reactances.size());
+}
 
 void AdjustableDipole() {
   if (ImGui::Begin("Adjustable")) {
     static int segs = 3;
-    constexpr double frequency = 2.4 * 1e9;
+    constexpr double frequency = 2.4 * 1e6;
     constexpr double wavelenght = kSpeedOfLight / frequency;
     constexpr double len = wavelenght / 2;
     constexpr double radius = wavelenght * 1e-4;
@@ -168,7 +172,9 @@ using Dipoles = std::vector<Dipole>;
 
 }
 
-void ShowInterface(const Dipoles& dipoles) {
+void ShowInterface(const Dipoles& dipoles,
+                   const std::vector<double>& resistances,
+                   const std::vector<double>& reactances) {
   auto* window = GuiInit();
 
   // Main loop
@@ -186,6 +192,14 @@ void ShowInterface(const Dipoles& dipoles) {
     }
     ImGui::End();
 
+    if (ImGui::Begin("Convergência com N -- Impedâncias")) {
+      if (ImPlot::BeginPlot("##Impedances")) {
+        PlotImpedances(resistances, reactances);
+      }
+      ImPlot::EndPlot();
+    }
+    ImGui::End();
+
     AdjustableDipole();
 
     ClearBackGround(window);
@@ -197,12 +211,11 @@ void ShowInterface(const Dipoles& dipoles) {
 
 int main() {
   // Inútil para esse problema, só importa a razão do comprimento de onda.
-  // double frequency = 2.4 * 1e6;
-  const double frequency = 2.4 * 1e9;
+  // double frequency = 2.4 * 1e9;
+  const double frequency = 300 * 1e6;
   double wavelenght = kSpeedOfLight / frequency;
   double len = wavelenght / 2;
   double radius = wavelenght * 1e-4;
-
   int elements = 3;
 
   std::vector<Dipole> dipoles;
@@ -210,7 +223,18 @@ int main() {
     dipoles.emplace_back(len, frequency, radius, elems);
   }
 
-  ShowInterface(dipoles);
+  std::vector<double> reactances;
+  std::vector<double> resistances;
+  reactances.reserve(128);
+  resistances.reserve(128);
+  for (int segs = 3; segs < 205; segs += 2) {
+    Dipole dipole{len, frequency, radius, segs};
+    const auto input_impedance = dipole.get_input_impedance();
+    resistances.emplace_back(input_impedance.real());
+    reactances.emplace_back(input_impedance.imag());
+  }
+
+  ShowInterface(dipoles, resistances, reactances);
 
   return 0;
 }
