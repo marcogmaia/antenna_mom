@@ -4,7 +4,12 @@
 #include <format>
 #include <iostream>
 #include <numbers>
+#include <numeric>
+#include <ranges>
+#include <vector>
 
+#include <imgui.h>
+#include <implot.h>
 #include <spdlog/spdlog.h>
 #include <Eigen/Core>
 #include <Eigen/Dense>
@@ -36,7 +41,9 @@ class Dipole {
         half_lenght_(length / 2.0),
         elements_(segments),
         Z_(Eigen::MatrixXcd(segments, segments)),
-        V_(Eigen::VectorXcd::Zero(segments)) {
+        V_(Eigen::VectorXcd::Zero(segments)),
+        xs_(segments + 2, 0),
+        ys_(segments + 2, 0) {
     const int central_element = elements_ / 2;
     const double omega = 2 * pi * frequency_;
     v_in = std::complex(0.0, -omega * kEpsilon0);
@@ -44,9 +51,18 @@ class Dipole {
     FillImpedances();
     I_ = Solve();
     z_in = 1.0 / I_(central_element);
+    std::iota(xs_.begin(), xs_.end(), 0);
+    std::ranges::transform(
+        xs_, xs_.begin(), [this](double n) { return n * delta_ - length_ / 2.0; });
+    std::ranges::transform(
+        I_, std::next(ys_.begin()), [](std::complex<double> value) { return std::abs(value); });
   }
 
   Eigen::VectorXcd GetCurrents() { return I_; }
+
+  const std::vector<double>& get_xs() const { return xs_; }
+
+  const std::vector<double>& get_ys() const { return ys_; }
 
  private:
   Eigen::VectorXcd Solve() {
@@ -102,25 +118,52 @@ class Dipole {
   Eigen::MatrixXcd Z_;
   Eigen::VectorXcd V_;
   Eigen::VectorXcd I_;
+
+  std::vector<double> xs_;
+  std::vector<double> ys_;
 };
+
+void PlotDipole(std::string_view legend, Dipole& dipole) {
+  const auto& xs = dipole.get_xs();
+  const auto& ys = dipole.get_ys();
+  ImPlot::PlotLine(legend.data(), xs.data(), ys.data(), xs.size());
+}
 
 int main() {
   // Inutil para esse problema, só importa a razão do comprimento de onda.
   // double frequency = 2.4 * 1e6;
-  const double frequency = 2.4 * 1e6;
+  const double frequency = 2.4 * 1e9;
   double wavelenght = kSpeedOfLight / frequency;
   double len = wavelenght / 2;
   double radius = wavelenght * 1e-4;
 
   int elements = 3;
 
-  for (const auto &elements : {3, 7, 19}) {
-    Dipole dipole(len, frequency, radius, elements);
-    std::cout << dipole.GetCurrents() << '\n';
-    std::cout << std::endl;
+  Dipole dipole1(len, frequency, radius, 3);
+  Dipole dipole2(len, frequency, radius, 7);
+  Dipole dipole3(len, frequency, radius, 19);
+  Dipole dipole4(len, frequency, radius, 55);
+
+  auto* window = GuiInit();
+  
+  // Main loop
+  while (!glfwWindowShouldClose(window)) {
+    GuiNewFrame();
+    glfwPollEvents();
+
+    if (ImPlot::BeginPlot("Dipole")) {
+      PlotDipole("N=3", dipole1);
+      PlotDipole("N=7", dipole2);
+      PlotDipole("N=19", dipole3);
+      PlotDipole("N=55", dipole4);
+    }
+    ImPlot::EndPlot();
+
+    ClearBackGround(window);
+    Render(window);
   }
 
-  ShowImgui();
+  GuiTerminate(window);
 
   return 0;
 }

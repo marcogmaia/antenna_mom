@@ -1,8 +1,5 @@
-// Dear ImGui: standalone example application for GLFW + OpenGL 3, using programmable pipeline
-// (GLFW is a cross-platform general purpose library for handling windows, inputs,
-// OpenGL/Vulkan/Metal graphics context creation, etc.) If you are new to Dear ImGui, read
-// documentation from the docs/ folder + read the top of imgui.cpp. Read online:
-// https://github.com/ocornut/imgui/tree/master/docs
+
+#include "gui.h"
 
 #include <exception>
 #include <string>
@@ -41,7 +38,12 @@ void Assert(const T& assertion, const std::string_view message = "") {
   }
 }
 
+void ErrorCallback(int code, const char* err_str) {
+  spdlog::error("GLFW Error. Code: {}, message: {}", code, err_str);
+}
+
 GLFWwindow* GuiInit() {
+  glfwSetErrorCallback(ErrorCallback);
   // Setup window
   glfwSetErrorCallback(glfw_error_callback);
   Assert(glfwInit(), "GLFW failed to initialize");
@@ -63,6 +65,7 @@ GLFWwindow* GuiInit() {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImPlot::CreateContext();
+  ImPlot::GetStyle().AntiAliasedLines = true;
   ImGuiIO& io = ImGui::GetIO();
   (void)io;
   // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
@@ -88,10 +91,6 @@ void GuiTerminate(GLFWwindow* window) {
   glfwTerminate();
 }
 
-void ErrorCallback(int code, const char* err_str) {
-  spdlog::error("GLFW Error. Code: {}, message: {}", code, err_str);
-}
-
 void GuiNewFrame() {
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
@@ -114,22 +113,17 @@ void Render(GLFWwindow* window) {
 }
 
 int ShowImgui() {
-  glfwSetErrorCallback(ErrorCallback);
   auto* window = GuiInit();
 
   ImPlot::CreateContext();
 
-  // Main loop
   while (!glfwWindowShouldClose(window)) {
     GuiNewFrame();
     glfwPollEvents();
-
     ImPlot::ShowDemoWindow();
-
     if (ImGui::Begin("Hello, world!")) {
       ImGui::End();
     }
-
     ClearBackGround(window);
     Render(window);
   }
