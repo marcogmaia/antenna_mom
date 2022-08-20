@@ -9,6 +9,8 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+#include "gui.h"
+
 namespace {
 
 using std::numbers::pi;
@@ -36,12 +38,11 @@ class Dipole {
         Z_(Eigen::MatrixXcd(segments, segments)),
         V_(Eigen::VectorXcd::Zero(segments)) {
     const double omega = 2 * pi * frequency_;
-    // i_in = std::complex(0.0, -omega * kEpsilon0);
-    i_in = std::complex(0.0, -2 * pi * frequency_ * kEpsilon0));
-    V_.array() = i_in;
+    v_in = std::complex(0.0, -omega * kEpsilon0);
+    z_in = 1.0 / v_in;
+    V_.array() = v_in;
     FillImpedances();
     Solve();
-    // z_in = 1.0 / i_in;
   }
 
   Eigen::VectorXcd GetCurrents() { return I_; }
@@ -96,7 +97,7 @@ class Dipole {
   const int elements_;
 
   std::complex<double> z_in;
-  std::complex<double> i_in;
+  std::complex<double> v_in;
   Eigen::MatrixXcd Z_;
   Eigen::VectorXcd V_;
   Eigen::VectorXcd I_;
@@ -113,6 +114,8 @@ int main() {
 
   Dipole dipole(len, frequency, radius, elements);
   std::cout << dipole.GetCurrents() << '\n';
+
+  ShowImgui();
 
   return 0;
 }
